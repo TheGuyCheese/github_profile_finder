@@ -237,7 +237,7 @@ export default function Home() {
       </div>
       <footer className="text-center py-8 text-gray-600 dark:text-gray-400 mt-8">
         <p className="text-sm">
-          {new Date().getFullYear()}-2040 Aditya Singh. All rights reserved.
+        © All rights reserved.
         </p>
       </footer>
     </main>
