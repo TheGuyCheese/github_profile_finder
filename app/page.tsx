@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SunIcon, MoonIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
@@ -23,13 +23,15 @@ const GitHubLogo = () => (
 );
 
 export default function Home() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [users, setUsers] = useState<GitHubUser[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [searchType, setSearchType] = useState<'username' | 'location'>('username');
+  const [usernameQuery, setUsernameQuery] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
+  const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [searchResults, setSearchResults] = useState<GitHubUser[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(true);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [totalCount, setTotalCount] = useState(0);
   const PER_PAGE = 30;
 
   useEffect(() => {
@@ -40,37 +42,66 @@ export default function Home() {
     }
   }, [darkMode]);
 
-  const searchUsers = async (newSearch = true) => {
-    if (!searchQuery) return;
-    
-    setLoading(true);
-    const currentPage = newSearch ? 1 : page;
-    
-    try {
-      const response = await fetch(
-        `https://api.github.com/search/users?q=${searchQuery}&per_page=${PER_PAGE}&page=${currentPage}`
-      );
-      const data: GitHubResponse = await response.json();
-      
-      if (newSearch) {
-        setUsers(data.items || []);
-        setPage(1);
-        setTotalCount(data.total_count);
-      } else {
-        setUsers(prev => [...prev, ...(data.items || [])]);
-      }
-      
-      setHasMore(data.total_count > currentPage * PER_PAGE);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    } finally {
-      setLoading(false);
+  const handleAddLocationFilter = () => {
+    if (locationFilter.trim() && !activeFilters.includes(`location:${locationFilter.trim()}`)) {
+      setActiveFilters([...activeFilters, `${locationFilter.trim()}`]);
+      setLocationFilter('');
+      setIsFilterModalOpen(false);
     }
   };
 
-  const loadMore = () => {
-    setPage(prev => prev + 1);
-    searchUsers(false);
+  const handleRemoveFilter = (filterToRemove: string) => {
+    setActiveFilters(activeFilters.filter(filter => filter !== filterToRemove));
+  };
+
+  const handleSearch = async () => {
+    // Validate search
+    if (!usernameQuery.trim() && activeFilters.length === 0) {
+      setError('Please enter a search query or add filters');
+      setSearchResults([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Construct search query
+      const searchParts = [];
+      
+      // Add username query if present
+      if (usernameQuery.trim()) {
+        searchParts.push(usernameQuery.trim());
+      }
+
+      // Add active filters with location qualifier
+      const locationFilters = activeFilters.map(filter => `location:${filter}`);
+      searchParts.push(...locationFilters);
+
+      const searchQuery = searchParts.join(' ');
+
+      const apiUrl = `https://api.github.com/search/users?q=${encodeURIComponent(searchQuery)}&per_page=30&page=1`;
+
+      const response = await fetch(apiUrl);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch users');
+      }
+
+      const data = await response.json();
+      
+      // If no results found, show a helpful message
+      if (data.items.length === 0) {
+        setError('No users found matching your search criteria');
+      }
+
+      setSearchResults(data.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      setSearchResults([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const containerVariants = {
@@ -87,6 +118,29 @@ export default function Home() {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0 }
   };
+
+  const filterModalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        filterModalRef.current && 
+        !filterModalRef.current.contains(event.target as Node)
+      ) {
+        setIsFilterModalOpen(false);
+      }
+    };
+
+    // Add event listener when modal is open
+    if (isFilterModalOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    // Cleanup event listener
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isFilterModalOpen]);
 
   return (
     <main className="min-h-screen transition-colors duration-300 dark:bg-gray-900 bg-gray-50">
@@ -120,53 +174,112 @@ export default function Home() {
             </motion.button>
           </div>
 
-          <div className="relative mb-12 max-w-3xl mx-auto">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && searchUsers(true)}
-                placeholder="Search GitHub users..."
-                className="w-full px-6 py-4 pl-14 rounded-xl border dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all text-lg shadow-lg"
-              />
-              <MagnifyingGlassIcon className="absolute left-5 top-1/2 transform -translate-y-1/2 w-6 h-6 text-gray-400" />
-            </div>
-            <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+          {/* Search and Filter Section */}
+          <div className="relative max-w-3xl mx-auto mb-12">
+            <div className="flex items-center space-x-4">
+              <div className="relative flex-grow">
+                <MagnifyingGlassIcon className="absolute left-5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500 z-10" />
+                <input
+                  type="text"
+                  value={usernameQuery}
+                  onChange={(e) => setUsernameQuery(e.target.value)}
+                  placeholder="Search GitHub users"
+                  className="w-full pl-12 pr-4 py-3 text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                />
+              </div>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => searchUsers(true)}
-                className="px-6 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all duration-200 font-medium shadow-lg shadow-purple-500/20"
+                onClick={handleSearch}
+                className="px-6 py-3 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-all duration-200 font-medium shadow-lg shadow-purple-500/20"
               >
                 Search
               </motion.button>
+              <div className="relative">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setIsFilterModalOpen(!isFilterModalOpen)}
+                  className="px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-200"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 16v-4.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
+                  </svg>
+                </motion.button>
+                {isFilterModalOpen && (
+                  <div 
+                    ref={filterModalRef}
+                    className="absolute z-50 right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md shadow-lg p-4"
+                  >
+                    <input
+                      type="text"
+                      value={locationFilter}
+                      onChange={(e) => setLocationFilter(e.target.value)}
+                      placeholder="Enter location"
+                      className="w-full py-2 px-3 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddLocationFilter()}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddLocationFilter}
+                      className="mt-3 w-full py-2 text-sm text-white bg-purple-600 rounded-md hover:bg-purple-700 transition-colors"
+                    >
+                      Add Location Filter
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* Active Filters Section */}
+          {activeFilters.length > 0 && (
+            <div className="max-w-3xl mx-auto mb-6 flex flex-wrap gap-2">
+              {activeFilters.map((filter, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  className="flex items-center bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-3 py-1 rounded-full text-sm"
+                >
+                  <span className="mr-2">{filter}</span>
+                  <button
+                    onClick={() => handleRemoveFilter(filter)}
+                    className="text-purple-600 dark:text-purple-300 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Results Section */}
       <div className="max-w-6xl mx-auto px-8 -mt-20">
-        {totalCount > 0 && (
+        {searchResults.length > 0 && (
           <motion.p 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-gray-600 dark:text-gray-400 mb-6 bg-white dark:bg-gray-800 inline-block px-4 py-2 rounded-full shadow-sm"
+            className="text-gray-600 dark:text-gray-400 mb-6"
           >
-            Found {totalCount.toLocaleString()} users
+            Found {searchResults.length} users
           </motion.p>
         )}
 
-        <AnimatePresence mode="wait">
-          {loading && users.length === 0 ? (
+        <AnimatePresence>
+          {isLoading && searchResults.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex justify-center items-center py-12"
+              className="flex justify-center items-center h-64"
             >
-              <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+              <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-500"></div>
             </motion.div>
           ) : (
             <motion.div
@@ -175,18 +288,16 @@ export default function Home() {
               animate="show"
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
             >
-              {users.map((user, index) => (
+              {searchResults.map((user, index) => (
                 <motion.a
                   key={`${user.login}-${index}`}
                   variants={itemVariants}
                   href={user.html_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="p-6 rounded-xl bg-white dark:bg-gray-800 shadow-lg hover:shadow-xl transition-all border border-gray-100 dark:border-gray-700 group"
+                  className="group relative bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden"
                 >
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-4 p-4">
                     <div className="relative">
                       <img
                         src={user.avatar_url}
@@ -195,8 +306,8 @@ export default function Home() {
                       />
                       <div className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 opacity-0 group-hover:opacity-10 transition-opacity"></div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-lg text-gray-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                    <div className="flex-grow">
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
                         {user.login}
                       </h3>
                       <p className="text-gray-600 dark:text-gray-400 text-sm flex items-center gap-1">
@@ -211,33 +322,19 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {hasMore && !loading && users.length > 0 && (
-          <motion.div
+        {error && (
+          <motion.p 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex justify-center mt-12 mb-16"
+            className="text-red-600 dark:text-red-400 mb-6 bg-white dark:bg-gray-800 inline-block px-4 py-2 rounded-full shadow-sm"
           >
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={loadMore}
-              className="px-8 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 hover:shadow-xl transition-colors font-medium shadow-lg shadow-purple-500/20 flex items-center gap-2"
-            >
-              {loading ? (
-                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  Load More
-                  <span className="text-purple-300">↓</span>
-                </>
-              )}
-            </motion.button>
-          </motion.div>
+            {error}
+          </motion.p>
         )}
       </div>
       <footer className="text-center py-8 text-gray-600 dark:text-gray-400 mt-8">
         <p className="text-sm">
-        © All rights reserved.
+        &copy; All rights reserved.
         </p>
       </footer>
     </main>
