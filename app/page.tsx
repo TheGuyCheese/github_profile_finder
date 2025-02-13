@@ -8,12 +8,6 @@ interface GitHubUser {
   login: string;
   avatar_url: string;
   html_url: string;
-  bio: string;
-}
-
-interface GitHubResponse {
-  items: GitHubUser[];
-  total_count: number;
 }
 
 const GitHubLogo = () => (
@@ -23,7 +17,6 @@ const GitHubLogo = () => (
 );
 
 export default function Home() {
-  const [searchType, setSearchType] = useState<'username' | 'location'>('username');
   const [usernameQuery, setUsernameQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
@@ -32,7 +25,6 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(true);
-  const PER_PAGE = 30;
 
   useEffect(() => {
     if (darkMode) {
