@@ -2,12 +2,31 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SunIcon, MoonIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { SunIcon, MoonIcon, MagnifyingGlassIcon, AdjustmentsHorizontalIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import Link from 'next/link';
 
 interface GitHubUser {
   login: string;
   avatar_url: string;
   html_url: string;
+}
+
+interface GitHubUserDetails extends GitHubUser {
+  name?: string;
+  bio?: string;
+  followers: number;
+  following: number;
+  public_repos: number;
+  location?: string;
+  company?: string;
+  blog?: string;
+  twitter_username?: string;
+  email?: string;
+}
+
+interface SearchResults {
+  items: GitHubUser[];
+  total_count: number;
 }
 
 const GitHubLogo = () => (
@@ -18,13 +37,47 @@ const GitHubLogo = () => (
 
 export default function Home() {
   const [usernameQuery, setUsernameQuery] = useState('');
-  const [locationFilter, setLocationFilter] = useState('');
-  const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [locations, setLocations] = useState<string[]>([]);
+  const [newLocation, setNewLocation] = useState('');
+  const [minRepos, setMinRepos] = useState('');
+  const [minFollowers, setMinFollowers] = useState('');
+  const [accountType, setAccountType] = useState<'all' | 'user' | 'org'>('all');
+  const [sortBy, setSortBy] = useState<'followers' | 'repositories' | 'joined' | ''>('');
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<GitHubUser[]>([]);
+  const [totalResultsCount, setTotalResultsCount] = useState(0);
+  const [selectedProfile, setSelectedProfile] = useState<GitHubUserDetails | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMoreResults, setHasMoreResults] = useState(false);
+  const [seenUsers, setSeenUsers] = useState(new Set<string>());
+
+  // Random Profile State
+  const [randomProfile, setRandomProfile] = useState<GitHubUserDetails | null>(null);
+  const [isRandomProfileLoading, setIsRandomProfileLoading] = useState(false);
+
+  useEffect(() => {
+    const isDark = localStorage.getItem('darkMode') === 'true';
+    setDarkMode(isDark);
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    const newDarkMode = !darkMode;
+    setDarkMode(newDarkMode);
+    localStorage.setItem('darkMode', String(newDarkMode));
+    if (newDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   useEffect(() => {
     if (darkMode) {
@@ -34,23 +87,51 @@ export default function Home() {
     }
   }, [darkMode]);
 
-  const handleAddLocationFilter = () => {
-    if (locationFilter.trim() && !activeFilters.includes(`location:${locationFilter.trim()}`)) {
-      setActiveFilters([...activeFilters, `${locationFilter.trim()}`]);
-      setLocationFilter('');
-      setIsFilterModalOpen(false);
+  const handleAddLocation = () => {
+    if (newLocation.trim() && !locations.includes(newLocation.trim())) {
+      setLocations([...locations, newLocation.trim()]);
+      setNewLocation('');
     }
   };
 
-  const handleRemoveFilter = (filterToRemove: string) => {
-    setActiveFilters(activeFilters.filter(filter => filter !== filterToRemove));
+  const handleRemoveLocation = (location: string) => {
+    setLocations(locations.filter(loc => loc !== location));
   };
 
-  const handleSearch = async () => {
-    // Validate search
-    if (!usernameQuery.trim() && activeFilters.length === 0) {
-      setError('Please enter a search query or add filters');
+  const constructSearchQuery = () => {
+    let query = usernameQuery;
+    
+    if (locations.length > 0) {
+      query += ' ' + locations.map(location => `location:${location}`).join(' ');
+    }
+
+    if (minRepos) {
+      query += ` repos:>=${minRepos}`;
+    }
+
+    if (minFollowers) {
+      query += ` followers:>=${minFollowers}`;
+    }
+
+    if (accountType !== 'all') {
+      query += ` type:${accountType}`;
+    }
+
+    if (sortBy) {
+      query += ` sort:${sortBy}`;
+    }
+
+    return query;
+  };
+
+  const handleSearch = async (page = 1) => {
+    const trimmedQuery = usernameQuery.trim();
+    const trimmedFilters = [...locations].map(filter => filter.trim()).filter(Boolean);
+
+    if (!trimmedQuery && trimmedFilters.length === 0) {
+      setError('Please enter a username or add location filters');
       setSearchResults([]);
+      setTotalResultsCount(0);
       return;
     }
 
@@ -58,42 +139,99 @@ export default function Home() {
     setError(null);
 
     try {
-      // Construct search query
-      const searchParts = [];
-      
-      // Add username query if present
-      if (usernameQuery.trim()) {
-        searchParts.push(usernameQuery.trim());
-      }
+      const searchQuery = constructSearchQuery();
+      const response = await fetch(
+        `https://api.github.com/search/users?q=${encodeURIComponent(searchQuery)}&per_page=30&page=${page}`,
+        { 
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            ...(process.env.NEXT_PUBLIC_GITHUB_TOKEN && {
+              'Authorization': `token ${process.env.NEXT_PUBLIC_GITHUB_TOKEN}`
+            })
+          },
+          next: { revalidate: 300 }
+        }
+      );
 
-      // Add active filters with location qualifier
-      const locationFilters = activeFilters.map(filter => `location:${filter}`);
-      searchParts.push(...locationFilters);
-
-      const searchQuery = searchParts.join(' ');
-
-      const apiUrl = `https://api.github.com/search/users?q=${encodeURIComponent(searchQuery)}&per_page=30&page=1`;
-
-      const response = await fetch(apiUrl);
-      
       if (!response.ok) {
-        throw new Error('Failed to fetch users');
+        if (response.status === 403) {
+          throw new Error('API rate limit exceeded. Please try again later or add a GitHub token.');
+        } else if (response.status === 422) {
+          throw new Error('Invalid search query. Please try a different search term.');
+        }
+        throw new Error('Failed to fetch search results. Please try again later.');
       }
 
-      const data = await response.json();
+      const data: SearchResults = await response.json();
       
-      // If no results found, show a helpful message
-      if (data.items.length === 0) {
-        setError('No users found matching your search criteria');
-      }
+      if (data.total_count === 0) {
+        setError('No users found matching your search criteria.');
+        setSearchResults([]);
+        setTotalResultsCount(0);
+        setHasMoreResults(false);
+      } else {
+        const newUsers = data.items.filter(user => !seenUsers.has(user.login));
+        const updatedSeenUsers = new Set(seenUsers);
+        newUsers.forEach(user => updatedSeenUsers.add(user.login));
+        setSeenUsers(updatedSeenUsers);
 
-      setSearchResults(data.items);
+        setSearchResults(page === 1 ? newUsers : [...searchResults, ...newUsers]);
+        setTotalResultsCount(data.total_count);
+        setHasMoreResults(searchResults.length + newUsers.length < data.total_count);
+        setCurrentPage(page);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
-      setSearchResults([]);
+      setError(err instanceof Error ? err.message : 'An error occurred while searching');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const loadMore = () => {
+    handleSearch(currentPage + 1);
+  };
+
+  const handleRandomProfile = async () => {
+    setIsRandomProfileLoading(true);
+    try {
+      const response = await fetch('https://api.github.com/users?per_page=100', {
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          ...(process.env.NEXT_PUBLIC_GITHUB_TOKEN && {
+            'Authorization': `token ${process.env.NEXT_PUBLIC_GITHUB_TOKEN}`
+          })
+        },
+        next: { revalidate: 3600 }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch random users');
+      }
+
+      const users = await response.json();
+      const randomUser = users[Math.floor(Math.random() * users.length)];
+      window.open(`/profile/${randomUser.login}`, '_blank');
+    } catch (error) {
+      setError('Failed to fetch random profile');
+    } finally {
+      setIsRandomProfileLoading(false);
+    }
+  };
+
+  const fetchUserDetails = async (username: string) => {
+    try {
+      const userDetailsResponse = await fetch(`https://api.github.com/users/${username}`);
+      const userDetails = await userDetailsResponse.json();
+      
+      setSelectedProfile(userDetails);
+    } catch (err) {
+      console.error('Error fetching user details:', err);
+      setError('Failed to fetch user details');
+    }
+  };
+
+  const closeSelectedProfile = () => {
+    setSelectedProfile(null);
   };
 
   const containerVariants = {
@@ -155,7 +293,7 @@ export default function Home() {
             </div>
             <motion.button
               whileTap={{ scale: 0.95 }}
-              onClick={() => setDarkMode(!darkMode)}
+              onClick={toggleDarkMode}
               className="p-3 rounded-full hover:bg-white/10 dark:hover:bg-gray-700/50 transition-colors"
             >
               {darkMode ? (
@@ -168,78 +306,62 @@ export default function Home() {
 
           {/* Search and Filter Section */}
           <div className="relative max-w-3xl mx-auto mb-12">
-            <div className="flex items-center space-x-4">
-              <div className="relative flex-grow">
-                <MagnifyingGlassIcon className="absolute left-5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500 z-10" />
-                <input
-                  type="text"
-                  value={usernameQuery}
-                  onChange={(e) => setUsernameQuery(e.target.value)}
-                  placeholder="Search GitHub users"
-                  className="w-full pl-12 pr-4 py-3 text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                />
-              </div>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleSearch}
-                className="px-6 py-3 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-all duration-200 font-medium shadow-lg shadow-purple-500/20"
-              >
-                Search
-              </motion.button>
-              <div className="relative">
+            <div className="flex flex-col items-center space-y-4 w-full max-w-3xl mx-auto">
+              <div className="flex items-center w-full space-x-2">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={usernameQuery}
+                    onChange={(e) => setUsernameQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                    placeholder="Search GitHub users..."
+                    className="w-full px-4 py-3 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
+                  />
+                </div>
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => setIsFilterModalOpen(!isFilterModalOpen)}
-                  className="px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-200"
+                  onClick={() => handleSearch()}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all duration-200 font-medium shadow-lg shadow-blue-500/20"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 16v-4.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
-                  </svg>
+                  Search
                 </motion.button>
-                {isFilterModalOpen && (
-                  <div 
-                    ref={filterModalRef}
-                    className="absolute z-50 right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md shadow-lg p-4"
-                  >
-                    <input
-                      type="text"
-                      value={locationFilter}
-                      onChange={(e) => setLocationFilter(e.target.value)}
-                      placeholder="Enter location"
-                      className="w-full py-2 px-3 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddLocationFilter()}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddLocationFilter}
-                      className="mt-3 w-full py-2 text-sm text-white bg-purple-600 rounded-md hover:bg-purple-700 transition-colors"
-                    >
-                      Add Location Filter
-                    </button>
-                  </div>
-                )}
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleRandomProfile}
+                  disabled={isRandomProfileLoading}
+                  className="px-6 py-3 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-all duration-200 font-medium shadow-lg shadow-purple-500/20 disabled:opacity-50"
+                >
+                  {isRandomProfileLoading ? 'Loading...' : 'I Feel Lucky'}
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setIsFilterModalOpen(true)}
+                  className="p-3 bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-200"
+                >
+                  <AdjustmentsHorizontalIcon className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+                </motion.button>
               </div>
             </div>
           </div>
 
           {/* Active Filters Section */}
-          {activeFilters.length > 0 && (
+          {locations.length > 0 && (
             <div className="max-w-3xl mx-auto mb-6 flex flex-wrap gap-2">
-              {activeFilters.map((filter, index) => (
+              {locations.map((location, index) => (
                 <motion.div
                   key={index}
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.8 }}
-                  className="flex items-center bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-3 py-1 rounded-full text-sm"
+                  className="flex items-center bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-3 py-1 rounded-full text-sm"
                 >
-                  <span className="mr-2">{filter}</span>
+                  <span className="mr-2">{location}</span>
                   <button
-                    onClick={() => handleRemoveFilter(filter)}
-                    className="text-purple-600 dark:text-purple-300 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    onClick={() => handleRemoveLocation(location)}
+                    className="text-green-600 dark:text-green-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -255,64 +377,71 @@ export default function Home() {
       {/* Results Section */}
       <div className="max-w-6xl mx-auto px-8 -mt-20">
         {searchResults.length > 0 && (
-          <motion.p 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-gray-600 dark:text-gray-400 mb-6"
-          >
-            Found {searchResults.length} users
-          </motion.p>
-        )}
-
-        <AnimatePresence>
-          {isLoading && searchResults.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex justify-center items-center h-64"
-            >
-              <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-500"></div>
-            </motion.div>
-          ) : (
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="show"
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-            >
-              {searchResults.map((user, index) => (
-                <motion.a
-                  key={`${user.login}-${index}`}
-                  variants={itemVariants}
-                  href={user.html_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group relative bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden"
+          <div className="w-full mt-8 max-w-6xl mx-auto">
+            <p className="text-gray-500 dark:text-gray-400 text-left mb-4">
+              Showing {searchResults.length} out of {totalResultsCount} results
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {searchResults.map((user) => (
+                <div
+                  key={`${user.login}-${currentPage}`}
+                  className="relative overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 group hover:shadow-lg dark:hover:shadow-gray-700 transition-all duration-300"
                 >
-                  <div className="flex items-center space-x-4 p-4">
+                  <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/5 dark:to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="p-6 flex flex-col items-center">
                     <div className="relative">
                       <img
                         src={user.avatar_url}
                         alt={user.login}
-                        className="w-16 h-16 rounded-full ring-2 ring-purple-500/20 group-hover:ring-purple-500/40 transition-all"
+                        className="w-24 h-24 rounded-full ring-2 ring-gray-200 dark:ring-gray-700 transition-all duration-300 group-hover:ring-blue-500"
                       />
-                      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 opacity-0 group-hover:opacity-10 transition-opacity"></div>
+                      <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </div>
-                    <div className="flex-grow">
-                      <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                        {user.login}
-                      </h3>
-                      <p className="text-gray-600 dark:text-gray-400 text-sm flex items-center gap-1">
-                        View Profile 
-                        <span className="transform translate-x-0 group-hover:translate-x-1 transition-transform">→</span>
-                      </p>
+                    <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
+                      {user.login}
+                    </h3>
+                    <div className="mt-4 transform translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+                      <Link
+                        href={`/profile/${user.login}`}
+                        target="_blank"
+                        className="block px-4 py-2 mb-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors text-center"
+                      >
+                        View Profile
+                      </Link>
+                      <a
+                        href={user.html_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-center"
+                      >
+                        GitHub Profile ↗
+                      </a>
                     </div>
                   </div>
-                </motion.a>
+                </div>
               ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+            {hasMoreResults && (
+              <div className="mt-6 text-center">
+                <button
+                  onClick={loadMore}
+                  disabled={isLoading}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors duration-300 disabled:opacity-50"
+                >
+                  {isLoading ? 'Loading...' : 'Load More'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isLoading && searchResults.length === 0 ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500"></div>
+          </div>
+        ) : (
+          <></>
+        )}
 
         {error && (
           <motion.p 
@@ -324,6 +453,143 @@ export default function Home() {
           </motion.p>
         )}
       </div>
+
+      {/* Filter Modal */}
+      {isFilterModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-xl"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Search Filters</h2>
+              <button
+                onClick={() => setIsFilterModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Location Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Locations
+                </label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {locations.map((location) => (
+                    <span
+                      key={location}
+                      className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300"
+                    >
+                      {location}
+                      <button
+                        onClick={() => handleRemoveLocation(location)}
+                        className="ml-2 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newLocation}
+                    onChange={(e) => setNewLocation(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddLocation()}
+                    placeholder="Add location..."
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={handleAddLocation}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Minimum Requirements */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Minimum Repositories
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={minRepos}
+                    onChange={(e) => setMinRepos(e.target.value)}
+                    className="w-full px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Minimum Followers
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={minFollowers}
+                    onChange={(e) => setMinFollowers(e.target.value)}
+                    className="w-full px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
+                  />
+                </div>
+              </div>
+
+              {/* Account Type Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Account Type
+                </label>
+                <select
+                  value={accountType}
+                  onChange={(e) => setAccountType(e.target.value as any)}
+                  className="w-full px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
+                >
+                  <option value="all">All Account Types</option>
+                  <option value="user">Users Only</option>
+                  <option value="org">Organizations Only</option>
+                </select>
+              </div>
+
+              {/* Sort By Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Sort Results By
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="w-full px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
+                >
+                  <option value="">Best Match</option>
+                  <option value="followers">Most Followers</option>
+                  <option value="repositories">Most Repositories</option>
+                  <option value="joined">Recently Joined</option>
+                </select>
+              </div>
+
+              {/* Apply Filters Button */}
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => {
+                    setIsFilterModalOpen(false);
+                    handleSearch();
+                  }}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+                >
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
       <footer className="text-center py-8 text-gray-600 dark:text-gray-400 mt-8">
         <p className="text-sm">
         &copy; All rights reserved.
