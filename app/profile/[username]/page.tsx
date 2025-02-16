@@ -4,6 +4,8 @@ import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { MapPinIcon, LinkIcon } from '@heroicons/react/24/outline';
+import FavoriteButton from '../../../components/FavoriteButton';
+import { useAuth } from '../../../context/AuthContext';
 
 interface GitHubUser {
   login: string;
@@ -391,9 +393,12 @@ export default function ProfilePage({ params }: PageProps) {
                 className="w-24 h-24 md:w-32 md:h-32 rounded-full ring-4 ring-gray-200 dark:ring-gray-700"
               />
               <div className="flex-1">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {profile.name || profile.login}
-                </h1>
+                <div className="flex items-center space-x-4 mb-4">
+                  <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                    {profile.name || profile.login}
+                  </h1>
+                  <FavoriteButton username={username} />
+                </div>
                 <p className="text-gray-600 dark:text-gray-400 mt-1">@{profile.login}</p>
                 {profile.bio && (
                   <p className="text-gray-700 dark:text-gray-300 mt-3">{profile.bio}</p>

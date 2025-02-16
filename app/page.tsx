@@ -5,6 +5,10 @@ import { motion } from 'framer-motion';
 import { SunIcon, MoonIcon, AdjustmentsHorizontalIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useAuth } from '../context/AuthContext';
+import AuthModal from '../components/AuthModal';
+import FavoriteButton from '../components/FavoriteButton';
+import UserMenu from '../components/UserMenu';
 
 interface GitHubUser {
   login: string;
@@ -40,6 +44,8 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMoreResults, setHasMoreResults] = useState(false);
   const [seenUsers, setSeenUsers] = useState(new Set<string>());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const { isAuthenticated, user, logout } = useAuth();
 
   // Filter modal ref
   const filterModalRef = useRef<HTMLDivElement>(null);
@@ -225,17 +231,28 @@ export default function Home() {
                 </p>
               </div>
             </div>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={toggleDarkMode}
-              className="p-3 rounded-full hover:bg-white/10 dark:hover:bg-gray-700/50 transition-colors"
-            >
-              {darkMode ? (
-                <SunIcon className="w-7 h-7 text-yellow-500" />
+            <div className="flex items-center space-x-4">
+              {isAuthenticated ? (
+                <UserMenu />
               ) : (
-                <MoonIcon className="w-7 h-7 text-gray-600" />
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors duration-200"
+                >
+                  Login
+                </button>
               )}
-            </motion.button>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                {darkMode ? (
+                  <SunIcon className="h-6 w-6" />
+                ) : (
+                  <MoonIcon className="h-6 w-6" />
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Search and Filter Section */}
@@ -288,9 +305,7 @@ export default function Home() {
                     onClick={() => handleRemoveLocation(location)}
                     className="text-green-600 dark:text-green-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    ×
                   </button>
                 </motion.div>
               ))}
@@ -318,31 +333,32 @@ export default function Home() {
                       <Image
                         src={user.avatar_url}
                         alt={user.login}
-                        width={48}
-                        height={48}
+                        width={96}
+                        height={96}
                         className="w-24 h-24 rounded-full ring-2 ring-gray-200 dark:ring-gray-700 transition-all duration-300 group-hover:ring-blue-500"
                       />
                       <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </div>
-                    <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
-                      {user.login}
-                    </h3>
-                    <div className="mt-4 transform translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
-                      <Link
-                        href={`/profile/${user.login}`}
-                        target="_blank"
-                        className="block px-4 py-2 mb-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors text-center"
-                      >
-                        View Profile
-                      </Link>
-                      <a
-                        href={user.html_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-center"
-                      >
-                        GitHub Profile ↗
-                      </a>
+                    <div className="mt-4 text-center">
+                      <div className="flex items-center justify-center space-x-2">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                          {user.login}
+                        </h3>
+                        <FavoriteButton username={user.login} />
+                      </div>
+                      <div className="mt-4 transform translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+                        <Link
+                          href={`/profile/${user.login}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 transition-colors"
+                        >
+                          View Profile
+                          <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -517,6 +533,7 @@ export default function Home() {
           </motion.div>
         </div>
       )}
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
       <footer className="text-center py-8 text-gray-600 dark:text-gray-400 mt-8">
         <p className="text-sm">
         &copy; All rights reserved.
