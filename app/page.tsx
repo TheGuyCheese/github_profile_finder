@@ -12,19 +12,6 @@ interface GitHubUser {
   html_url: string;
 }
 
-interface GitHubUserDetails extends GitHubUser {
-  name?: string;
-  bio?: string;
-  followers: number;
-  following: number;
-  public_repos: number;
-  location?: string;
-  company?: string;
-  blog?: string;
-  twitter_username?: string;
-  email?: string;
-}
-
 interface SearchResults {
   items: GitHubUser[];
   total_count: number;
