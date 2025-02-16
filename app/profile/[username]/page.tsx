@@ -5,26 +5,22 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import FavoriteButton from '../../../components/FavoriteButton';
-import { useAuth } from '../../../context/AuthContext';
 import { motion } from 'framer-motion';
 import { MapPinIcon, LinkIcon } from '@heroicons/react/24/outline';
 
 interface GitHubUser {
   login: string;
+  name: string | null;
   avatar_url: string;
-  html_url: string;
-  name?: string;
-}
-
-interface ProfileData extends GitHubUser {
-  bio?: string;
+  bio: string | null;
+  company: string | null;
+  location: string | null;
+  blog: string | null;
+  twitter_username: string | null;
+  public_repos: number;
   followers: number;
   following: number;
-  public_repos: number;
-  location?: string;
-  company?: string;
-  blog?: string;
-  twitter_username?: string;
+  created_at: string;
 }
 
 interface Repository {
@@ -38,18 +34,16 @@ interface Repository {
 }
 
 interface PageProps {
-  params: Promise<{ username: string }>;
 }
 
-export default function ProfilePage({ params }: PageProps) {
-  const resolvedParams = useParams();
-  const username = resolvedParams.username;
-  const [profile, setProfile] = useState<ProfileData | null>(null);
+export default function ProfilePage() {
+  const { username } = useParams();
+  const [profile, setProfile] = useState<GitHubUser | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [followers, setFollowers] = useState<GitHubUser[]>([]);
   const [following, setFollowing] = useState<GitHubUser[]>([]);
   const [activeTab, setActiveTab] = useState<'repositories' | 'followers' | 'following'>('repositories');
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -76,7 +70,7 @@ export default function ProfilePage({ params }: PageProps) {
   useEffect(() => {
     async function fetchProfileData() {
       try {
-        setIsLoading(true);
+        setLoading(true);
         setError(null);
 
         // Prepare headers
@@ -151,7 +145,7 @@ export default function ProfilePage({ params }: PageProps) {
         console.error('Fetch error:', err);
         setError(err instanceof Error ? err.message : 'An unexpected error occurred');
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     }
 
@@ -171,7 +165,7 @@ export default function ProfilePage({ params }: PageProps) {
   const currentRepos = repositories.slice(indexOfFirstRepo, indexOfLastRepo);
   const totalRepoPages = Math.ceil(repositories.length / reposPerPage);
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <div className="relative w-20 h-20">

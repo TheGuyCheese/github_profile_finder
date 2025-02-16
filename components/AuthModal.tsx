@@ -26,34 +26,36 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setError('');
 
     try {
-      if (isLogin) {
-        const result = await login(formData.email, formData.password);
-        if (!result.success) {
-          setError(result.error || 'Failed to log in');
-          return;
-        }
-      } else {
+      if (!isLogin) {
         if (!formData.username.trim()) {
           setError('Username is required');
+          setIsLoading(false);
           return;
         }
         if (!formData.email.trim()) {
           setError('Email is required');
-          return;
-        }
-        if (formData.password.length < 6) {
-          setError('Password must be at least 6 characters');
-          return;
-        }
-
-        const result = await signup(formData.username, formData.email, formData.password);
-        if (!result.success) {
-          setError(result.error || 'Failed to sign up');
+          setIsLoading(false);
           return;
         }
       }
+      
+      if (!formData.password) {
+        setError('Password is required');
+        setIsLoading(false);
+        return;
+      }
+
+      const result = isLogin
+        ? await login(formData.email, formData.password)
+        : await signup(formData.username, formData.email, formData.password);
+
+      if (!result.success) {
+        setError(result.error || (isLogin ? 'Failed to log in' : 'Failed to sign up'));
+        return;
+      }
+
       onClose();
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);
@@ -155,9 +157,17 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 <div className="flex flex-col space-y-3">
                   <button
                     type="submit"
-                    className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                    className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                    disabled={isLoading}
                   >
-                    {isLogin ? 'Login' : 'Create Account'}
+                    {isLoading ? (
+                      <div className="flex items-center justify-center">
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                        Loading...
+                      </div>
+                    ) : (
+                      isLogin ? 'Log In' : 'Sign Up'
+                    )}
                   </button>
                   <button
                     type="button"
