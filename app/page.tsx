@@ -44,12 +44,12 @@ export default function Home() {
   // Filter modal ref
   const filterModalRef = useRef<HTMLDivElement>(null);
 
-  const handleAccountTypeChange = (value: 'all' | 'user' | 'org') => {
-    setAccountType(value);
+  const handleAccountTypeChange = (value: string) => {
+    setAccountType(value as 'all' | 'user' | 'org');
   };
 
-  const handleSortByChange = (value: 'followers' | 'repositories' | 'joined' | '') => {
-    setSortBy(value);
+  const handleSortByChange = (value: string) => {
+    setSortBy(value as 'followers' | 'repositories' | 'joined' | '');
   };
 
   useEffect(() => {
