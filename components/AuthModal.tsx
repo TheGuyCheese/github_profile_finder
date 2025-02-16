@@ -13,6 +13,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const { login, signup } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -21,15 +22,15 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
     setError('');
 
     try {
       if (isLogin) {
         const result = await login(formData.email, formData.password);
-        if (result.success) {
-          onClose();
-        } else {
-          setError(result.error || 'Invalid credentials');
+        if (!result.success) {
+          setError(result.error || 'Failed to log in');
+          return;
         }
       } else {
         if (!formData.username.trim()) {
@@ -46,14 +47,16 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         }
 
         const result = await signup(formData.username, formData.email, formData.password);
-        if (result.success) {
-          onClose();
-        } else {
-          setError(result.error || 'Error creating account');
+        if (!result.success) {
+          setError(result.error || 'Failed to sign up');
+          return;
         }
       }
-    } catch (error) {
-      setError('An error occurred. Please try again.');
+      onClose();
+    } catch (err) {
+      setError('An unexpected error occurred');
+    } finally {
+      setIsLoading(false);
     }
   };
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { SunIcon, MoonIcon, AdjustmentsHorizontalIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
@@ -28,110 +28,45 @@ const GitHubLogo = () => (
 );
 
 export default function Home() {
-  const [usernameQuery, setUsernameQuery] = useState('');
-  const [locations, setLocations] = useState<string[]>([]);
-  const [newLocation, setNewLocation] = useState('');
-  const [accountType, setAccountType] = useState<'all' | 'user' | 'org'>('all');
-  const [sortBy, setSortBy] = useState<'followers' | 'repositories' | 'joined' | ''>('');
-  const [minRepos, setMinRepos] = useState('');
-  const [minFollowers, setMinFollowers] = useState('');
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [searchResults, setSearchResults] = useState<GitHubUser[]>([]);
-  const [totalResultsCount, setTotalResultsCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [users, setUsers] = useState<GitHubUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [darkMode, setDarkMode] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMoreResults, setHasMoreResults] = useState(false);
-  const [seenUsers, setSeenUsers] = useState(new Set<string>());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const { isAuthenticated, user, logout } = useAuth();
-
-  // Filter modal ref
-  const filterModalRef = useRef<HTMLDivElement>(null);
-
-  const handleAccountTypeChange = (value: string) => {
-    setAccountType(value as 'all' | 'user' | 'org');
-  };
-
-  const handleSortByChange = (value: string) => {
-    setSortBy(value as 'followers' | 'repositories' | 'joined' | '');
-  };
+  const { isAuthenticated } = useAuth();
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
-    const isDark = localStorage.getItem('darkMode') === 'true';
-    setDarkMode(isDark);
-    if (isDark) {
+    // Check system preference
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setTheme('dark');
       document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
     }
   }, []);
 
   const toggleDarkMode = () => {
-    const newDarkMode = !darkMode;
-    setDarkMode(newDarkMode);
-    localStorage.setItem('darkMode', String(newDarkMode));
-    if (newDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
-
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [darkMode]);
-
-  const handleAddLocation = () => {
-    if (newLocation.trim() && !locations.includes(newLocation.trim())) {
-      setLocations([...locations, newLocation.trim()]);
-      setNewLocation('');
-    }
-  };
-
-  const handleRemoveLocation = (location: string) => {
-    setLocations(locations.filter(loc => loc !== location));
+    setTheme(prevTheme => {
+      const newTheme = prevTheme === 'light' ? 'dark' : 'light';
+      if (newTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      return newTheme;
+    });
   };
 
   const constructSearchQuery = () => {
-    let query = usernameQuery;
-    
-    if (locations.length > 0) {
-      query += ' ' + locations.map(location => `location:${location}`).join(' ');
-    }
-
-    if (minRepos) {
-      query += ` repos:>=${minRepos}`;
-    }
-
-    if (minFollowers) {
-      query += ` followers:>=${minFollowers}`;
-    }
-
-    if (accountType !== 'all') {
-      query += ` type:${accountType}`;
-    }
-
-    if (sortBy) {
-      query += ` sort:${sortBy}`;
-    }
-
+    let query = searchQuery;
     return query;
   };
 
-  const handleSearch = async (page = 1) => {
-    const trimmedQuery = usernameQuery.trim();
-    const trimmedFilters = [...locations].map(filter => filter.trim()).filter(Boolean);
+  const handleSearch = async () => {
+    const trimmedQuery = searchQuery.trim();
 
-    if (!trimmedQuery && trimmedFilters.length === 0) {
-      setError('Please enter a username or add location filters');
-      setSearchResults([]);
-      setTotalResultsCount(0);
+    if (!trimmedQuery) {
+      setError('Please enter a username');
+      setUsers([]);
       return;
     }
 
@@ -141,13 +76,10 @@ export default function Home() {
     try {
       const searchQuery = constructSearchQuery();
       const response = await fetch(
-        `https://api.github.com/search/users?q=${encodeURIComponent(searchQuery)}&per_page=30&page=${page}`,
+        `https://api.github.com/search/users?q=${encodeURIComponent(searchQuery)}&per_page=30&page=1`,
         { 
           headers: {
             'Accept': 'application/vnd.github.v3+json',
-            ...(process.env.NEXT_PUBLIC_GITHUB_TOKEN && {
-              'Authorization': `token ${process.env.NEXT_PUBLIC_GITHUB_TOKEN}`
-            })
           },
           next: { revalidate: 300 }
         }
@@ -166,19 +98,9 @@ export default function Home() {
       
       if (data.total_count === 0) {
         setError('No users found matching your search criteria.');
-        setSearchResults([]);
-        setTotalResultsCount(0);
-        setHasMoreResults(false);
+        setUsers([]);
       } else {
-        const newUsers = data.items.filter(user => !seenUsers.has(user.login));
-        const updatedSeenUsers = new Set(seenUsers);
-        newUsers.forEach(user => updatedSeenUsers.add(user.login));
-        setSeenUsers(updatedSeenUsers);
-
-        setSearchResults(page === 1 ? newUsers : [...searchResults, ...newUsers]);
-        setTotalResultsCount(data.total_count);
-        setHasMoreResults(searchResults.length + newUsers.length < data.total_count);
-        setCurrentPage(page);
+        setUsers(data.items);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred while searching');
@@ -186,31 +108,6 @@ export default function Home() {
       setIsLoading(false);
     }
   };
-
-  const loadMore = () => {
-    handleSearch(currentPage + 1);
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        filterModalRef.current && 
-        !filterModalRef.current.contains(event.target as Node)
-      ) {
-        setIsFilterModalOpen(false);
-      }
-    };
-
-    // Add event listener when modal is open
-    if (isFilterModalOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    // Cleanup event listener
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isFilterModalOpen]);
 
   return (
     <main className="min-h-screen transition-colors duration-300 dark:bg-gray-900 bg-gray-50">
@@ -243,10 +140,11 @@ export default function Home() {
                 </button>
               )}
               <button
-                onClick={() => setDarkMode(!darkMode)}
-                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                onClick={toggleDarkMode}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                aria-label="Toggle dark mode"
               >
-                {darkMode ? (
+                {theme === 'dark' ? (
                   <SunIcon className="h-6 w-6" />
                 ) : (
                   <MoonIcon className="h-6 w-6" />
@@ -262,8 +160,8 @@ export default function Home() {
                 <div className="flex-1 relative">
                   <input
                     type="text"
-                    value={usernameQuery}
-                    onChange={(e) => setUsernameQuery(e.target.value)}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     placeholder="Search GitHub users..."
                     className="w-full px-4 py-3 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
@@ -277,54 +175,23 @@ export default function Home() {
                 >
                   Search
                 </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setIsFilterModalOpen(true)}
-                  className="p-3 bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-200"
-                >
-                  <AdjustmentsHorizontalIcon className="w-6 h-6 text-gray-600 dark:text-gray-300" />
-                </motion.button>
               </div>
             </div>
           </div>
-
-          {/* Active Filters Section */}
-          {locations.length > 0 && (
-            <div className="max-w-3xl mx-auto mb-6 flex flex-wrap gap-2">
-              {locations.map((location, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="flex items-center bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-3 py-1 rounded-full text-sm"
-                >
-                  <span className="mr-2">{location}</span>
-                  <button
-                    onClick={() => handleRemoveLocation(location)}
-                    className="text-green-600 dark:text-green-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                  >
-                    ×
-                  </button>
-                </motion.div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
       {/* Results Section */}
       <div className="max-w-6xl mx-auto px-8 -mt-20">
-        {searchResults.length > 0 && (
+        {users.length > 0 && (
           <div className="w-full mt-8 max-w-6xl mx-auto">
             <p className="text-gray-500 dark:text-gray-400 text-left mb-4">
-              Showing {searchResults.length} out of {totalResultsCount} results
+              Showing {users.length} results
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {searchResults.map((user) => (
+              {users.map((user) => (
                 <div
-                  key={`${user.login}-${currentPage}`}
+                  key={user.login}
                   className="relative overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 group hover:shadow-lg dark:hover:shadow-gray-700 transition-all duration-300"
                 >
                   <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/5 dark:to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -337,7 +204,6 @@ export default function Home() {
                         height={96}
                         className="w-24 h-24 rounded-full ring-2 ring-gray-200 dark:ring-gray-700 transition-all duration-300 group-hover:ring-blue-500"
                       />
-                      <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </div>
                     <div className="mt-4 text-center">
                       <div className="flex items-center justify-center space-x-2">
@@ -364,21 +230,10 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            {hasMoreResults && (
-              <div className="mt-6 text-center">
-                <button
-                  onClick={loadMore}
-                  disabled={isLoading}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors duration-300 disabled:opacity-50"
-                >
-                  {isLoading ? 'Loading...' : 'Load More'}
-                </button>
-              </div>
-            )}
           </div>
         )}
 
-        {isLoading && searchResults.length === 0 ? (
+        {isLoading && users.length === 0 ? (
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500"></div>
           </div>
@@ -397,142 +252,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* Filter Modal */}
-      {isFilterModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-xl"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Search Filters</h2>
-              <button
-                onClick={() => setIsFilterModalOpen(false)}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                <XMarkIcon className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="space-y-6">
-              {/* Location Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Locations
-                </label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {locations.map((location) => (
-                    <span
-                      key={location}
-                      className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300"
-                    >
-                      {location}
-                      <button
-                        onClick={() => handleRemoveLocation(location)}
-                        className="ml-2 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newLocation}
-                    onChange={(e) => setNewLocation(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleAddLocation()}
-                    placeholder="Add location..."
-                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    onClick={handleAddLocation}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-
-              {/* Minimum Requirements */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Minimum Repositories
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="0"
-                    value={minRepos}
-                    onChange={(e) => setMinRepos(e.target.value)}
-                    className="w-full px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Minimum Followers
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="0"
-                    value={minFollowers}
-                    onChange={(e) => setMinFollowers(e.target.value)}
-                    className="w-full px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
-                  />
-                </div>
-              </div>
-
-              {/* Account Type Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Account Type
-                </label>
-                <select
-                  value={accountType}
-                  onChange={(e) => handleAccountTypeChange(e.target.value)}
-                  className="w-full px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
-                >
-                  <option value="all">All Account Types</option>
-                  <option value="user">Users Only</option>
-                  <option value="org">Organizations Only</option>
-                </select>
-              </div>
-
-              {/* Sort By Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Sort Results By
-                </label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => handleSortByChange(e.target.value)}
-                  className="w-full px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
-                >
-                  <option value="">Best Match</option>
-                  <option value="followers">Most Followers</option>
-                  <option value="repositories">Most Repositories</option>
-                  <option value="joined">Recently Joined</option>
-                </select>
-              </div>
-
-              {/* Apply Filters Button */}
-              <div className="flex justify-end mt-6">
-                <button
-                  onClick={() => {
-                    setIsFilterModalOpen(false);
-                    handleSearch();
-                  }}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
-                >
-                  Apply Filters
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
       <footer className="text-center py-8 text-gray-600 dark:text-gray-400 mt-8">
         <p className="text-sm">

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { MapPinIcon, LinkIcon } from '@heroicons/react/24/outline';
+import Image from 'next/image';
 import FavoriteButton from '../../../components/FavoriteButton';
 import { useAuth } from '../../../context/AuthContext';
-import Image from 'next/image';
+import { motion } from 'framer-motion';
+import { MapPinIcon, LinkIcon } from '@heroicons/react/24/outline';
 
 interface GitHubUser {
   login: string;
@@ -41,7 +42,7 @@ interface PageProps {
 }
 
 export default function ProfilePage({ params }: PageProps) {
-  const resolvedParams = use(params);
+  const resolvedParams = useParams();
   const username = resolvedParams.username;
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
