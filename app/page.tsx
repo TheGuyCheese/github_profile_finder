@@ -7,8 +7,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '../context/AuthContext';
 import AuthModal from '../components/AuthModal';
-import FavoriteButton from '../components/FavoriteButton';
-import UserMenu from '../components/UserMenu';
 
 interface GitHubUser {
   login: string;
@@ -56,10 +54,7 @@ export default function Home() {
     });
   };
 
-  const constructSearchQuery = () => {
-    const query = searchQuery;
-    return query;
-  };
+  const constructSearchQuery = () => searchQuery.trim();
 
   const handleSearch = async () => {
     const trimmedQuery = searchQuery.trim();
@@ -130,7 +125,7 @@ export default function Home() {
             </div>
             <div className="flex items-center space-x-4">
               {isAuthenticated ? (
-                <UserMenu />
+                <></>
               ) : (
                 <button
                   onClick={() => setIsAuthModalOpen(true)}
@@ -210,7 +205,6 @@ export default function Home() {
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400">
                           {user.login}
                         </h3>
-                        <FavoriteButton username={user.login} />
                       </div>
                       <div className="mt-4 transform translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
                         <Link

@@ -26,14 +26,10 @@ interface GitHubUser {
 interface Repository {
   id: number;
   name: string;
-  description?: string;
-  html_url: string;
+  description: string | null;
   stargazers_count: number;
-  language?: string;
-  updated_at: string;
-}
-
-interface PageProps {
+  language: string | null;
+  html_url: string;
 }
 
 export default function ProfilePage() {
