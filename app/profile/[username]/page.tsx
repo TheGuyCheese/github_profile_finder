@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { MapPinIcon, LinkIcon } from '@heroicons/react/24/outline';
 import FavoriteButton from '../../../components/FavoriteButton';
 import { useAuth } from '../../../context/AuthContext';
+import Image from 'next/image';
 
 interface GitHubUser {
   login: string;
@@ -302,9 +303,11 @@ export default function ProfilePage({ params }: PageProps) {
                 key={follower.login}
                 className="flex items-center space-x-4 bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all duration-300"
               >
-                <img
+                <Image
                   src={follower.avatar_url}
                   alt={follower.login}
+                  width={64}
+                  height={64}
                   className="w-16 h-16 rounded-full ring-2 ring-gray-200 dark:ring-gray-700"
                 />
                 <div className="flex-1 min-w-0">
@@ -340,9 +343,11 @@ export default function ProfilePage({ params }: PageProps) {
                 key={followedUser.login}
                 className="flex items-center space-x-4 bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all duration-300"
               >
-                <img
+                <Image
                   src={followedUser.avatar_url}
                   alt={followedUser.login}
+                  width={64}
+                  height={64}
                   className="w-16 h-16 rounded-full ring-2 ring-gray-200 dark:ring-gray-700"
                 />
                 <div className="flex-1 min-w-0">
@@ -387,9 +392,11 @@ export default function ProfilePage({ params }: PageProps) {
           {/* Profile Overview */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-8">
             <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-              <img
+              <Image
                 src={profile.avatar_url}
                 alt={`${profile.login}'s avatar`}
+                width={128}
+                height={128}
                 className="w-24 h-24 md:w-32 md:h-32 rounded-full ring-4 ring-gray-200 dark:ring-gray-700"
               />
               <div className="flex-1">

@@ -9,13 +9,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { StarIcon, TrashIcon } from '@heroicons/react/24/solid';
 import ImageCropper from '../../../components/ImageCropper';
 
+interface GitHubUser {
+  login: string;
+  name: string | null;
+  avatar_url: string;
+  html_url: string;
+}
+
 export default function UserProfile() {
-  const { user, isAuthenticated, logout, removeFromFavorites } = useAuth();
+  const { user, isAuthenticated, removeFromFavorites } = useAuth();
   const router = useRouter();
   const [avatarUrl, setAvatarUrl] = useState<string>('');
-  const [favorites, setFavorites] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<GitHubUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedTab, setSelectedTab] = useState('favorites');
   const [cropImage, setCropImage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,7 +52,7 @@ export default function UserProfile() {
           })
         );
 
-        setFavorites(profiles.filter(Boolean));
+        setFavorites(profiles.filter(Boolean) as GitHubUser[]);
       } catch (error) {
         console.error('Error fetching favorite profiles:', error);
       }

@@ -2,7 +2,19 @@
 
 import { useState, useCallback } from 'react';
 import Cropper from 'react-easy-crop';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface Area {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+}
 
 interface ImageCropperProps {
   image: string;
@@ -11,11 +23,11 @@ interface ImageCropperProps {
 }
 
 export default function ImageCropper({ image, onCropComplete, onCancel }: ImageCropperProps) {
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
 
-  const onCropChange = (crop: { x: number; y: number }) => {
+  const onCropChange = (crop: Point) => {
     setCrop(crop);
   };
 
@@ -23,7 +35,7 @@ export default function ImageCropper({ image, onCropComplete, onCancel }: ImageC
     setZoom(zoom);
   };
 
-  const onCropCompleteHandler = useCallback((_: any, croppedAreaPixels: any) => {
+  const onCropCompleteHandler = useCallback((_: Point, croppedAreaPixels: Area) => {
     setCroppedAreaPixels(croppedAreaPixels);
   }, []);
 
@@ -37,7 +49,7 @@ export default function ImageCropper({ image, onCropComplete, onCancel }: ImageC
 
   const getCroppedImg = async (
     imageSrc: string,
-    pixelCrop: any,
+    pixelCrop: Area,
   ): Promise<string> => {
     const image = await createImage(imageSrc);
     const canvas = document.createElement('canvas');
@@ -47,11 +59,9 @@ export default function ImageCropper({ image, onCropComplete, onCancel }: ImageC
       throw new Error('No 2d context');
     }
 
-    // Set canvas size to match the desired crop size
     canvas.width = pixelCrop.width;
     canvas.height = pixelCrop.height;
 
-    // Draw the cropped image onto the canvas
     ctx.drawImage(
       image,
       pixelCrop.x,
@@ -64,7 +74,6 @@ export default function ImageCropper({ image, onCropComplete, onCancel }: ImageC
       pixelCrop.height,
     );
 
-    // Convert canvas to base64 string
     return canvas.toDataURL('image/jpeg');
   };
 
