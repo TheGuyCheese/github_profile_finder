@@ -33,8 +33,12 @@ interface Repository {
   updated_at: string;
 }
 
-export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
-  const resolvedParams = use(params) as { username: string };
+interface PageProps {
+  params: Promise<{ username: string }>;
+}
+
+export default function ProfilePage({ params }: PageProps) {
+  const resolvedParams = use(params);
   const username = resolvedParams.username;
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
@@ -43,26 +47,20 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
   const [activeTab, setActiveTab] = useState<'repositories' | 'followers' | 'following'>('repositories');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [visibleRepos, setVisibleRepos] = useState<number>(5);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredFollowers, setFilteredFollowers] = useState<GitHubUser[]>([]);
-  const [filteredFollowing, setFilteredFollowing] = useState<GitHubUser[]>([]);
-  const [darkMode, setDarkMode] = useState(false);
-
+  
   // Add state for repository pagination
   const [currentRepoPage, setCurrentRepoPage] = useState(1);
   const reposPerPage = 10;
 
   useEffect(() => {
     const isDark = localStorage.getItem('darkMode') === 'true';
-    setDarkMode(isDark);
     document.documentElement.classList.toggle('dark', isDark);
 
     // Set up a listener for theme changes
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'darkMode') {
         const newDarkMode = e.newValue === 'true';
-        setDarkMode(newDarkMode);
         document.documentElement.classList.toggle('dark', newDarkMode);
       }
     };
@@ -156,19 +154,12 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
     fetchProfileData();
   }, [username]);
 
-  useEffect(() => {
-    if (activeTab === 'followers') {
-      const filtered = followers.filter(user => 
-        user.login.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredFollowers(filtered);
-    } else if (activeTab === 'following') {
-      const filtered = following.filter(user => 
-        user.login.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredFollowing(filtered);
-    }
-  }, [searchQuery, followers, following, activeTab]);
+  // Filter function for followers and following
+  const getFilteredUsers = (users: GitHubUser[]) => {
+    return users.filter(user => 
+      user.login.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  };
 
   // Get current repos
   const indexOfLastRepo = currentRepoPage * reposPerPage;
@@ -304,7 +295,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
       case 'followers':
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {followers.map((follower) => (
+            {getFilteredUsers(followers).map((follower) => (
               <div
                 key={follower.login}
                 className="flex items-center space-x-4 bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all duration-300"
@@ -342,7 +333,7 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
       case 'following':
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {following.map((followedUser) => (
+            {getFilteredUsers(following).map((followedUser) => (
               <div
                 key={followedUser.login}
                 className="flex items-center space-x-4 bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all duration-300"
@@ -495,28 +486,15 @@ export default function ProfilePage({ params }: { params: Promise<{ username: st
 
           {/* Search bar for followers/following */}
           {(activeTab === 'followers' || activeTab === 'following') && (
-            <div className="mb-4">
+            <div className="px-6 mb-6 mt-4">
               <div className="relative">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={`Search ${activeTab}...`}
+                  placeholder={`Filter ${activeTab}...`}
                   className="w-full max-w-md px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
                 />
-                <svg
-                  className="absolute right-3 top-2.5 h-5 w-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
               </div>
             </div>
           )}

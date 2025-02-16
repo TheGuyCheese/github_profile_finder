@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { SunIcon, MoonIcon, MagnifyingGlassIcon, AdjustmentsHorizontalIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { motion } from 'framer-motion';
+import { SunIcon, MoonIcon, AdjustmentsHorizontalIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
+import Image from 'next/image';
 
 interface GitHubUser {
   login: string;
@@ -39,14 +40,13 @@ export default function Home() {
   const [usernameQuery, setUsernameQuery] = useState('');
   const [locations, setLocations] = useState<string[]>([]);
   const [newLocation, setNewLocation] = useState('');
-  const [minRepos, setMinRepos] = useState('');
-  const [minFollowers, setMinFollowers] = useState('');
   const [accountType, setAccountType] = useState<'all' | 'user' | 'org'>('all');
   const [sortBy, setSortBy] = useState<'followers' | 'repositories' | 'joined' | ''>('');
+  const [minRepos, setMinRepos] = useState('');
+  const [minFollowers, setMinFollowers] = useState('');
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<GitHubUser[]>([]);
   const [totalResultsCount, setTotalResultsCount] = useState(0);
-  const [selectedProfile, setSelectedProfile] = useState<GitHubUserDetails | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(true);
@@ -54,9 +54,16 @@ export default function Home() {
   const [hasMoreResults, setHasMoreResults] = useState(false);
   const [seenUsers, setSeenUsers] = useState(new Set<string>());
 
-  // Random Profile State
-  const [randomProfile, setRandomProfile] = useState<GitHubUserDetails | null>(null);
-  const [isRandomProfileLoading, setIsRandomProfileLoading] = useState(false);
+  // Filter modal ref
+  const filterModalRef = useRef<HTMLDivElement>(null);
+
+  const handleAccountTypeChange = (value: 'all' | 'user' | 'org') => {
+    setAccountType(value);
+  };
+
+  const handleSortByChange = (value: 'followers' | 'repositories' | 'joined' | '') => {
+    setSortBy(value);
+  };
 
   useEffect(() => {
     const isDark = localStorage.getItem('darkMode') === 'true';
@@ -191,66 +198,6 @@ export default function Home() {
     handleSearch(currentPage + 1);
   };
 
-  const handleRandomProfile = async () => {
-    setIsRandomProfileLoading(true);
-    try {
-      const response = await fetch('https://api.github.com/users?per_page=100', {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          ...(process.env.NEXT_PUBLIC_GITHUB_TOKEN && {
-            'Authorization': `token ${process.env.NEXT_PUBLIC_GITHUB_TOKEN}`
-          })
-        },
-        next: { revalidate: 3600 }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch random users');
-      }
-
-      const users = await response.json();
-      const randomUser = users[Math.floor(Math.random() * users.length)];
-      window.open(`/profile/${randomUser.login}`, '_blank');
-    } catch (error) {
-      setError('Failed to fetch random profile');
-    } finally {
-      setIsRandomProfileLoading(false);
-    }
-  };
-
-  const fetchUserDetails = async (username: string) => {
-    try {
-      const userDetailsResponse = await fetch(`https://api.github.com/users/${username}`);
-      const userDetails = await userDetailsResponse.json();
-      
-      setSelectedProfile(userDetails);
-    } catch (err) {
-      console.error('Error fetching user details:', err);
-      setError('Failed to fetch user details');
-    }
-  };
-
-  const closeSelectedProfile = () => {
-    setSelectedProfile(null);
-  };
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 }
-  };
-
-  const filterModalRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -329,15 +276,6 @@ export default function Home() {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={handleRandomProfile}
-                  disabled={isRandomProfileLoading}
-                  className="px-6 py-3 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-all duration-200 font-medium shadow-lg shadow-purple-500/20 disabled:opacity-50"
-                >
-                  {isRandomProfileLoading ? 'Loading...' : 'I Feel Lucky'}
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
                   onClick={() => setIsFilterModalOpen(true)}
                   className="p-3 bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-200"
                 >
@@ -390,9 +328,11 @@ export default function Home() {
                   <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/5 dark:to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   <div className="p-6 flex flex-col items-center">
                     <div className="relative">
-                      <img
+                      <Image
                         src={user.avatar_url}
                         alt={user.login}
+                        width={48}
+                        height={48}
                         className="w-24 h-24 rounded-full ring-2 ring-gray-200 dark:ring-gray-700 transition-all duration-300 group-hover:ring-blue-500"
                       />
                       <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -548,7 +488,7 @@ export default function Home() {
                 </label>
                 <select
                   value={accountType}
-                  onChange={(e) => setAccountType(e.target.value as any)}
+                  onChange={(e) => handleAccountTypeChange(e.target.value)}
                   className="w-full px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
                 >
                   <option value="all">All Account Types</option>
@@ -564,7 +504,7 @@ export default function Home() {
                 </label>
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
+                  onChange={(e) => handleSortByChange(e.target.value)}
                   className="w-full px-4 py-2 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
                 >
                   <option value="">Best Match</option>
