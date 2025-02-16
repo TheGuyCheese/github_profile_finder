@@ -21,6 +21,7 @@ interface GitHubUser {
   followers: number;
   following: number;
   created_at: string;
+  html_url: string;
 }
 
 interface Repository {
@@ -34,7 +35,8 @@ interface Repository {
 }
 
 export default function ProfilePage() {
-  const { username } = useParams();
+  const params = useParams();
+  const username = typeof params.username === 'string' ? params.username : Array.isArray(params.username) ? params.username[0] : '';
   const [profile, setProfile] = useState<GitHubUser | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [followers, setFollowers] = useState<GitHubUser[]>([]);
@@ -65,6 +67,12 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
+    if (!username) {
+      setError('Username is required');
+      setLoading(false);
+      return;
+    }
+
     async function fetchProfileData() {
       try {
         setLoading(true);
